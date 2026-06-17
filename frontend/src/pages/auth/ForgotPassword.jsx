@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import { GraduationCap, Mail, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 
 export default function ForgotPassword() {
+  const { resetPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
@@ -21,8 +22,8 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      const response = await api.auth.resetPassword(email);
-      setSuccessMsg(response.message);
+      const response = await resetPassword(email);
+      setSuccessMsg(response.message || "Password recovery email has been sent successfully.");
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
