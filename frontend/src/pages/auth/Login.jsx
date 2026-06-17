@@ -357,40 +357,6 @@ export default function Login() {
                   </button>
                 </p>
               )}
-
-              {/* Demo Helper Tools */}
-              <div
-                style={{
-                  backgroundColor: "#FFFDF7",
-                  padding: "0.75rem",
-                  borderRadius: "6px",
-                  border: "1px dashed var(--structure-border)",
-                  fontSize: "12px",
-                  textAlign: "left"
-                }}
-              >
-                <div style={{ fontWeight: "700", color: "var(--academic-charcoal)", marginBottom: "0.25rem" }}>
-                  Demo Accounts (Shortcut):
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ padding: "0.25rem 0.5rem", fontSize: "11px", height: "auto" }}
-                    onClick={() => handleDemoCredentials("admin")}
-                  >
-                    Load Admin
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ padding: "0.25rem 0.5rem", fontSize: "11px", height: "auto" }}
-                    onClick={() => handleDemoCredentials("parent")}
-                  >
-                    Load Parent
-                  </button>
-                </div>
-              </div>
             </>
           )}
         </div>
