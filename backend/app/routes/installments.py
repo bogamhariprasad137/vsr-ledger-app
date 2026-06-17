@@ -1,14 +1,20 @@
 import datetime
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from app.database import get_db_connection
+from app.utils.auth import require_firebase_auth
 
 installments_bp = Blueprint('installments', __name__)
 
 @installments_bp.route('/<int:student_id>', methods=['GET'])
+@require_firebase_auth()
 def get_installments_by_student_id(student_id):
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
+            if g.current_user['role'] == 'parent':
+                cursor.execute("SELECT student_id FROM students WHERE student_id = %s AND user_id = %s", (student_id, g.current_user['user_id']))
+                if not cursor.fetchone():
+                    return jsonify({"success": False, "message": "Access denied. Student is not linked to your account."}), 403
             # Query installments for student_id by joining with fees table
             cursor.execute("""
                 SELECT i.* 
@@ -31,6 +37,7 @@ def get_installments_by_student_id(student_id):
         return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
 
 @installments_bp.route('/<int:fee_id>', methods=['POST'])
+@require_firebase_auth(role='admin')
 def save_installments(fee_id):
     data = request.json or {}
     updated_rows = data.get('installments', [])

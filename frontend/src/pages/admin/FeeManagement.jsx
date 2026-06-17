@@ -14,7 +14,8 @@ import {
   Plus,
   Printer,
   ChevronRight,
-  Info
+  Info,
+  Download
 } from "lucide-react";
 
 
@@ -30,6 +31,7 @@ export default function FeeManagement() {
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedStudentInsts, setSelectedStudentInsts] = useState([]);
+  const [receipts, setReceipts] = useState([]);
   const [summaryData, setSummaryData] = useState({
     allocated: 0,
     collected: 0,
@@ -47,10 +49,34 @@ export default function FeeManagement() {
   const [formSuccess, setFormSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadSuccess, setDownloadSuccess] = useState("");
+
+  const handleReceiptDownload = async (rec) => {
+    if (!rec) return;
+    setDownloadingReceiptId(rec.receipt_id);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      await api.receipts.download(rec);
+      setDownloadSuccess("Receipt downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download receipt: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
+
   const loadData = async () => {
     try {
       const data = await api.students.getAll();
       setStudents(data);
+
+      const receiptList = await api.receipts.getAll();
+      setReceipts(receiptList);
 
       // Math metrics summaries
       let allocated = 0;
@@ -59,10 +85,12 @@ export default function FeeManagement() {
       let overdue = 0;
 
       data.forEach(s => {
-        allocated += s.total_fee || 0;
-        collected += s.paid_amount || 0;
-        pending += s.pending_amount || 0;
+        allocated += Number(s.total_fee) || 0;
+        collected += Number(s.paid_amount) || 0;
       });
+
+      // Calculate Pending Fees = Total Allocated - Total Collected
+      pending = allocated - collected;
 
       // Calculate overdue amount from installments
       const studentInstsList = await Promise.all(
@@ -71,7 +99,7 @@ export default function FeeManagement() {
       const flatInsts = studentInstsList.flat();
       flatInsts.forEach(inst => {
         if (inst.status === "overdue") {
-          overdue += inst.amount;
+          overdue += Number(inst.amount) || 0;
         }
       });
 
@@ -189,6 +217,26 @@ export default function FeeManagement() {
         </p>
       </div>
 
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Download Status Toast Banner */}
+      {downloadError && (
+        <div className="badge badge-overdue" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AlertCircle size={16} />
+          <span>{downloadError}</span>
+        </div>
+      )}
+      {downloadSuccess && (
+        <div className="badge badge-paid" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <CheckCircle size={16} />
+          <span>{downloadSuccess}</span>
+        </div>
+      )}
+
       {/* Summary Metrics Row (4 Cards) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
         <div className="card metric-card">
@@ -196,7 +244,7 @@ export default function FeeManagement() {
             <span className="metric-label">Total Allocated</span>
             <Users size={20} color="var(--warm-muted)" />
           </div>
-          <div className="metric-value mono-data">₹{summaryData.allocated.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data">{Math.round(summaryData.allocated)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-info" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Total Billed
@@ -209,7 +257,7 @@ export default function FeeManagement() {
             <span className="metric-label">Total Collected</span>
             <CheckCircle size={20} color="#0D9488" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#0D9488" }}>₹{summaryData.collected.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#0D9488" }}>{Math.round(summaryData.collected)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-paid" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Cleared Dues
@@ -222,7 +270,7 @@ export default function FeeManagement() {
             <span className="metric-label">Pending Balance</span>
             <Calendar size={20} color="#D97706" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#D97706" }}>₹{summaryData.pending.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#D97706" }}>{Math.round(summaryData.pending)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-pending" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Expected
@@ -235,7 +283,7 @@ export default function FeeManagement() {
             <span className="metric-label">Overdue Outstanding</span>
             <AlertCircle size={20} color="#E11D48" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#E11D48" }}>₹{summaryData.overdue.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#E11D48" }}>{Math.round(summaryData.overdue)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-overdue" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Arrears
@@ -399,34 +447,64 @@ export default function FeeManagement() {
 
               {/* Installments vertical timeline */}
               <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" }}>
-                {selectedStudentInsts.map(inst => (
-                  <div 
-                    key={inst.installment_id} 
-                    style={{ 
-                      display: "flex", 
-                      justifyContent: "space-between", 
-                      alignItems: "center", 
-                      padding: "0.625rem", 
-                      backgroundColor: "#FFFFFF", 
-                      border: "1px solid var(--structure-border)", 
-                      borderRadius: "6px",
-                      fontSize: "13px"
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: "700" }}>Installment #{inst.installment_number}</div>
-                      <div style={{ fontSize: "11px", color: "var(--warm-muted)", marginTop: "2px" }}>
-                        Due: <span className="mono-data">{inst.due_date}</span>
+                {selectedStudentInsts.map(inst => {
+                  const rec = receipts.find(r => r.installment_id === inst.installment_id);
+                  return (
+                    <div 
+                      key={inst.installment_id} 
+                      style={{ 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center", 
+                        padding: "0.625rem", 
+                        backgroundColor: "#FFFFFF", 
+                        border: "1px solid var(--structure-border)", 
+                        borderRadius: "6px",
+                        fontSize: "13px"
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: "700" }}>Installment #{inst.installment_number}</div>
+                        <div style={{ fontSize: "11px", color: "var(--warm-muted)", marginTop: "2px" }}>
+                          Due: <span className="mono-data">{inst.due_date}</span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                        <div className="mono-data" style={{ fontWeight: "700" }}>₹{inst.amount.toLocaleString("en-IN")}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", marginTop: "2px" }}>
+                          <span className={`badge ${inst.status === "paid" ? "badge-paid" : inst.status === "overdue" ? "badge-overdue" : "badge-info"}`} style={{ fontSize: "9px", padding: "0.1rem 0.35rem" }}>
+                            {inst.status}
+                          </span>
+                          {inst.status === "paid" && rec && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReceiptDownload(rec);
+                              }}
+                              className="btn btn-secondary"
+                              style={{
+                                padding: "0.15rem 0.35rem",
+                                fontSize: "10px",
+                                height: "auto",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center"
+                              }}
+                              disabled={downloadingReceiptId === rec.receipt_id}
+                              title="Download Receipt PDF"
+                            >
+                              {downloadingReceiptId === rec.receipt_id ? (
+                                <div style={{ width: "10px", height: "10px", border: "1.5px solid #ccc", borderTopColor: "#333", borderRadius: "50%", animation: "spin 1.5s linear infinite" }} />
+                              ) : (
+                                <Download size={10} />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div className="mono-data" style={{ fontWeight: "700" }}>₹{inst.amount.toLocaleString("en-IN")}</div>
-                      <span className={`badge ${inst.status === "paid" ? "badge-paid" : inst.status === "overdue" ? "badge-overdue" : "badge-info"}`} style={{ fontSize: "9px", padding: "0.1rem 0.35rem" }}>
-                        {inst.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Log Payment Form */}

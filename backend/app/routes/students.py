@@ -1,11 +1,13 @@
 import datetime
 import random
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from app.database import get_db_connection
+from app.utils.auth import require_firebase_auth
 
 students_bp = Blueprint('students', __name__)
 
 @students_bp.route('', methods=['GET'])
+@require_firebase_auth(role='admin')
 def get_all_students():
     try:
         conn = get_db_connection()
@@ -53,6 +55,7 @@ def get_all_students():
         return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
 
 @students_bp.route('/<int:student_id>', methods=['GET'])
+@require_firebase_auth(role='admin')
 def get_student_by_id(student_id):
     try:
         conn = get_db_connection()
@@ -137,8 +140,11 @@ def get_student_by_id(student_id):
         return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
 
 @students_bp.route('/parent/<email>', methods=['GET'])
+@require_firebase_auth()
 def get_students_by_parent_email(email):
     email = email.strip().lower()
+    if g.current_user['role'] == 'parent' and g.current_user['email'].lower() != email:
+        return jsonify({"success": False, "message": "Access denied. You can only view your own student records."}), 403
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
@@ -228,6 +234,7 @@ def get_students_by_parent_email(email):
         return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
 
 @students_bp.route('', methods=['POST'])
+@require_firebase_auth(role='admin')
 def create_student():
     data = request.json or {}
     
@@ -398,6 +405,7 @@ def create_student():
         return jsonify({"success": False, "message": f"Database transaction failed: {str(e)}"}), 500
 
 @students_bp.route('/<int:student_id>', methods=['PUT'])
+@require_firebase_auth(role='admin')
 def update_student(student_id):
     data = request.json or {}
     
@@ -518,6 +526,7 @@ def update_student(student_id):
         return jsonify({"success": False, "message": f"Database transaction failed: {str(e)}"}), 500
 
 @students_bp.route('/<int:student_id>', methods=['DELETE'])
+@require_firebase_auth(role='admin')
 def delete_student(student_id):
     conn = get_db_connection()
     try:

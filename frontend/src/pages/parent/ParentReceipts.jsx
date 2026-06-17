@@ -1,14 +1,30 @@
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
-import { Download, FileText, Calendar, Wallet } from "lucide-react";
+import { Download, FileText, Calendar, Wallet, AlertCircle, CheckCircle } from "lucide-react";
 
 export default function ParentReceipts() {
   const { activeStudent } = useAuth();
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadSuccess, setDownloadSuccess] = useState("");
 
   if (!activeStudent) return null;
 
-  const handleReceiptDownload = (rec) => {
-    api.receipts.download(rec);
+  const handleReceiptDownload = async (rec) => {
+    setDownloadingReceiptId(rec.receipt_id);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      await api.receipts.download(rec);
+      setDownloadSuccess("Receipt downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download receipt: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
   };
 
   const receipts = activeStudent.receipts || [];
@@ -22,10 +38,30 @@ export default function ParentReceipts() {
         </p>
       </div>
 
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Download Status Toast Banner */}
+      {downloadError && (
+        <div className="badge badge-overdue" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AlertCircle size={16} />
+          <span>{downloadError}</span>
+        </div>
+      )}
+      {downloadSuccess && (
+        <div className="badge badge-paid" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <CheckCircle size={16} />
+          <span>{downloadSuccess}</span>
+        </div>
+      )}
+
       {receipts.length > 0 ? (
         <div className="grid-3">
           {receipts.map(rec => (
-            <div className="card" key={rec.receipt_id} style={{ display: "flex", flexDirection: "column", justifyBetween: "space-between" }}>
+            <div className="card" key={rec.receipt_id} style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
                   <div
@@ -58,7 +94,7 @@ export default function ParentReceipts() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     <Wallet size={14} />
-                    <span>Amount: <strong className="mono-data" style={{ color: "var(--academic-charcoal)" }}>₹{rec.amount_paid.toFixed(2)}</strong></span>
+                    <span>Amount: <strong className="mono-data" style={{ color: "var(--academic-charcoal)" }}>₹{Number(rec.amount_paid).toFixed(2)}</strong></span>
                   </div>
                 </div>
               </div>
@@ -67,9 +103,19 @@ export default function ParentReceipts() {
                 className="btn btn-primary"
                 style={{ width: "100%", fontSize: "13px", display: "flex", alignItems: "center", gap: "0.5rem", justifyContent: "center" }}
                 onClick={() => handleReceiptDownload(rec)}
+                disabled={downloadingReceiptId === rec.receipt_id}
               >
-                <Download size={14} />
-                <span>Download Invoice File</span>
+                {downloadingReceiptId === rec.receipt_id ? (
+                  <>
+                    <div style={{ width: "14px", height: "14px", border: "2px solid #ccc", borderTopColor: "#333", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                    <span>Downloading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={14} />
+                    <span>Download Invoice File</span>
+                  </>
+                )}
               </button>
             </div>
           ))}

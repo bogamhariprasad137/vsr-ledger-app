@@ -54,7 +54,21 @@ export default function StudentDetail() {
     );
   }
 
-  const fee = student.feeDetails;
+  const fee = student.feeDetails ? {
+    ...student.feeDetails,
+    total_fee: Number(student.feeDetails.total_fee) || 0,
+    paid_amount: Number(student.feeDetails.paid_amount) || 0,
+    pending_amount: Number(student.feeDetails.pending_amount) || 0,
+    admission_fee: Number(student.feeDetails.admission_fee) || 0,
+    admission_fee_paid: Number(student.feeDetails.admission_fee_paid) || 0,
+    admission_fee_remaining: Number(student.feeDetails.admission_fee_remaining) || 0,
+    term_fee: Number(student.feeDetails.term_fee) || 0,
+    term_fee_paid: Number(student.feeDetails.term_fee_paid) || 0,
+    term_fee_remaining: Number(student.feeDetails.term_fee_remaining) || 0,
+    daycare_fee: Number(student.feeDetails.daycare_fee) || 0,
+    daycare_fee_paid: Number(student.feeDetails.daycare_fee_paid) || 0,
+    daycare_fee_remaining: Number(student.feeDetails.daycare_fee_remaining) || 0,
+  } : null;
 
   return (
     <div className="content-pane">

@@ -1,36 +1,26 @@
 import { useState } from "react";
-import { FileText, Download, BarChart3, TrendingUp, Calendar, AlertTriangle } from "lucide-react";
+import { FileText, Download, BarChart3, TrendingUp, Calendar, AlertTriangle, AlertCircle, CheckCircle } from "lucide-react";
+import { api } from "../../services/api";
 
 export default function Reports() {
   const [downloading, setDownloading] = useState("");
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadSuccess, setDownloadSuccess] = useState("");
 
-  const triggerDownload = (type, filename) => {
+  const triggerDownload = async (type, filename) => {
     setDownloading(type);
-    setTimeout(() => {
-      const content = `
-==================================================
-       FIRSTCRY INTELLITOTS FEES AUDIT REPORT
-==================================================
-Report Type   : ${type.toUpperCase()}
-Generated At  : ${new Date().toISOString()}
-Academic Term : 2026 Academic Year
---------------------------------------------------
-This file simulates the CSV/PDF export of student
-installment balances, fee collections, and overdue
-outstanding ledgers.
-==================================================
-`;
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      await api.reports.download(type, filename);
+      setDownloadSuccess(`${filename} downloaded successfully!`);
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download report: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
       setDownloading("");
-    }, 1000);
+    }
   };
 
   return (
@@ -41,6 +31,20 @@ outstanding ledgers.
           Generate and download PDF reports for billing summaries and transaction audits.
         </p>
       </div>
+
+      {/* Download Status Toast Banner */}
+      {downloadError && (
+        <div className="badge badge-overdue" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AlertCircle size={16} />
+          <span>{downloadError}</span>
+        </div>
+      )}
+      {downloadSuccess && (
+        <div className="badge badge-paid" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <CheckCircle size={16} />
+          <span>{downloadSuccess}</span>
+        </div>
+      )}
 
       <div className="grid-2">
         {/* Available Reports list */}
@@ -70,10 +74,10 @@ outstanding ledgers.
                 className="btn btn-primary"
                 style={{ fontSize: "12px", padding: "0.5rem 0.75rem" }}
                 disabled={downloading !== ""}
-                onClick={() => triggerDownload("Collections Ledger", "Overall_Collections_Ledger_2026.pdf")}
+                onClick={() => triggerDownload("collections", "Overall_Collections_Ledger_2026.pdf")}
               >
                 <Download size={14} />
-                <span>{downloading === "Collections Ledger" ? "Generating..." : "Download PDF"}</span>
+                <span>{downloading === "collections" ? "Generating..." : "Download PDF"}</span>
               </button>
             </div>
 
@@ -98,10 +102,10 @@ outstanding ledgers.
                 className="btn btn-danger"
                 style={{ fontSize: "12px", padding: "0.5rem 0.75rem" }}
                 disabled={downloading !== ""}
-                onClick={() => triggerDownload("Arrears Report", "Overdue_Arrears_Report_2026.pdf")}
+                onClick={() => triggerDownload("arrears", "Overdue_Arrears_Report_2026.pdf")}
               >
                 <Download size={14} />
-                <span>{downloading === "Arrears Report" ? "Generating..." : "Download PDF"}</span>
+                <span>{downloading === "arrears" ? "Generating..." : "Download PDF"}</span>
               </button>
             </div>
 
@@ -126,10 +130,10 @@ outstanding ledgers.
                 className="btn btn-primary"
                 style={{ fontSize: "12px", padding: "0.5rem 0.75rem" }}
                 disabled={downloading !== ""}
-                onClick={() => triggerDownload("Student Roster", "Student_Roster_Metadata_2026.pdf")}
+                onClick={() => triggerDownload("roster", "Student_Roster_Metadata_2026.pdf")}
               >
                 <Download size={14} />
-                <span>{downloading === "Student Roster" ? "Generating..." : "Download PDF"}</span>
+                <span>{downloading === "roster" ? "Generating..." : "Download PDF"}</span>
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -44,18 +44,31 @@ function Layout({ children, title, allowedRole }) {
 
 // Root redirector based on session role
 function RootRedirect() {
-  const sessionUser = localStorage.getItem("session_user");
-  if (sessionUser) {
-    try {
-      const user = JSON.parse(sessionUser);
-      if (user.role === "admin") {
-        return <Navigate to="/admin/dashboard" replace />;
-      } else if (user.role === "parent") {
-        return <Navigate to="/parent/dashboard" replace />;
-      }
-    } catch (e) {
-      // JSON corruption safety
-      localStorage.removeItem("session_user");
+  const { currentUser, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        backgroundColor: '#F2E6B3',
+        color: '#4B2E21',
+        fontWeight: 'bold',
+        fontSize: '1.2rem',
+        fontFamily: "'Geist', sans-serif"
+      }}>
+        Loading Session Details...
+      </div>
+    );
+  }
+
+  if (currentUser) {
+    if (currentUser.role === "admin") {
+      return <Navigate to="/admin/dashboard" replace />;
+    } else if (currentUser.role === "parent") {
+      return <Navigate to="/parent/dashboard" replace />;
     }
   }
   return <Navigate to="/login" replace />;

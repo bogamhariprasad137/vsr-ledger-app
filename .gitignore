@@ -28,6 +28,8 @@ database/mysql_data/
 *.secret
 *.pem
 *.key
+serviceAccountKey.json
+backend/serviceAccountKey.json
 
 # Temporary test scripts
 brain/verify_api.py

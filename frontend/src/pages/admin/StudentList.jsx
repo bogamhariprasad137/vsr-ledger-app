@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../services/api";
-import { Search, UserPlus, Filter, Trash2, Eye, CalendarDays, Settings, ShieldAlert, X } from "lucide-react";
+import { Search, UserPlus, Filter, Trash2, Eye, CalendarDays, Settings, ShieldAlert, X, CheckCircle } from "lucide-react";
 
 export default function StudentList() {
   const [students, setStudents] = useState([]);
@@ -15,6 +15,7 @@ export default function StudentList() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     student_name: "",
     parent_name: "",
@@ -92,6 +93,7 @@ export default function StudentList() {
     });
     setErrorMsg("");
     setSuccessMsg("");
+    setIsSubmitting(false);
     setShowAddModal(true);
   };
 
@@ -128,6 +130,7 @@ export default function StudentList() {
     });
     setErrorMsg("");
     setSuccessMsg("");
+    setIsSubmitting(false);
     setShowAddModal(true);
   };
 
@@ -173,6 +176,8 @@ export default function StudentList() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
 
@@ -187,9 +192,11 @@ export default function StudentList() {
       setTimeout(() => {
         setShowAddModal(false);
         loadStudents();
-      }, 1500);
+        setIsSubmitting(false);
+      }, 500);
     } catch (err) {
       setErrorMsg(err.message);
+      setIsSubmitting(false);
     }
   };
 
@@ -679,8 +686,8 @@ export default function StudentList() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  {isEditing ? "Save Configuration" : "Initialize Profile"}
+                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? "Processing..." : (isEditing ? "Save Configuration" : "Initialize Profile")}
                 </button>
               </div>
             </form>

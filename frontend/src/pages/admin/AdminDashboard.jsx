@@ -51,6 +51,11 @@ export default function AdminDashboard() {
   const [modalSuccess, setModalSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+  const [downloadingStatement, setDownloadingStatement] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadSuccess, setDownloadSuccess] = useState("");
+
   // Read URL query triggers
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -84,18 +89,20 @@ export default function AdminDashboard() {
       let daycareCollected = 0;
 
       studentList.forEach(s => {
-        totalAllocated += s.total_fee;
-        totalCollected += s.paid_amount;
-        totalPending += s.pending_amount;
+        totalAllocated += Number(s.total_fee) || 0;
+        totalCollected += Number(s.paid_amount) || 0;
 
-        admissionAllocated += s.admission_fee;
-        termAllocated += s.term_fee;
-        daycareAllocated += s.daycare_fee;
+        admissionAllocated += Number(s.admission_fee) || 0;
+        termAllocated += Number(s.term_fee) || 0;
+        daycareAllocated += Number(s.daycare_fee) || 0;
 
-        admissionCollected += s.admission_fee_paid || 0;
-        termCollected += s.term_fee_paid || 0;
-        daycareCollected += s.daycare_fee_paid || 0;
+        admissionCollected += Number(s.admission_fee_paid) || 0;
+        termCollected += Number(s.term_fee_paid) || 0;
+        daycareCollected += Number(s.daycare_fee_paid) || 0;
       });
+
+      // Calculate Pending Fees = Total Allocated - Total Collected
+      totalPending = totalAllocated - totalCollected;
 
       // Fetch installments to calculate overdue
       const allStudentsInstallments = await Promise.all(
@@ -105,7 +112,7 @@ export default function AdminDashboard() {
       
       flatInsts.forEach(inst => {
         if (inst.status === "overdue") {
-          totalOverdue += inst.amount;
+          totalOverdue += Number(inst.amount) || 0;
         }
       });
 
@@ -243,8 +250,20 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleReceiptDownload = (rec) => {
-    api.receipts.download(rec);
+  const handleReceiptDownload = async (rec) => {
+    setDownloadingReceiptId(rec.receipt_id);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      await api.receipts.download(rec);
+      setDownloadSuccess("Receipt downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download receipt: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
   };
 
   const handleExportCSV = () => {
@@ -275,36 +294,21 @@ ${receipts.map(r => `${r.receipt_number},${r.student_name},${r.amount_paid},${r.
     }
   };
 
-  const handleExportPDF = () => {
-    const content = `
-================================================================
-                    FEE COLLECTIONS AUDIT REPORT
-================================================================
-Generated Date : ${new Date().toISOString().split("T")[0]}
-Currency       : INR (₹)
-----------------------------------------------------------------
-METRICS SUMMARY:
-* Total Students       : ${dashboardData.totalStudents}
-* Total Fees Allocated : ₹${dashboardData.allocated.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-* Total Fees Collected : ₹${dashboardData.collected.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-* Pending Fees         : ₹${dashboardData.pending.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-* Overdue Fees         : ₹${dashboardData.overdue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-----------------------------------------------------------------
-FEE CATEGORY COLLECTIONS PROGRESS:
-* Admission Fee Collection : ₹${dashboardData.admissionCollected.toLocaleString("en-IN", { minimumFractionDigits: 2 })} / ₹${dashboardData.admissionAllocated.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${dashboardData.admissionAllocated > 0 ? ((dashboardData.admissionCollected / dashboardData.admissionAllocated) * 100).toFixed(1) : 0}%)
-* Term Fee Collection      : ₹${dashboardData.termCollected.toLocaleString("en-IN", { minimumFractionDigits: 2 })} / ₹${dashboardData.termAllocated.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${dashboardData.termAllocated > 0 ? ((dashboardData.termCollected / dashboardData.termAllocated) * 100).toFixed(1) : 0}%)
-* Daycare Fee Collection   : ₹${dashboardData.daycareCollected.toLocaleString("en-IN", { minimumFractionDigits: 2 })} / ₹${dashboardData.daycareAllocated.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${dashboardData.daycareAllocated > 0 ? ((dashboardData.daycareCollected / dashboardData.daycareAllocated) * 100).toFixed(1) : 0}%)
-================================================================
-`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Collections_Report_${new Date().toISOString().split("T")[0]}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleExportPDF = async () => {
+    setDownloadingStatement(true);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      const filename = `Collections_Report_${new Date().toISOString().split("T")[0]}.pdf`;
+      await api.reports.download('collections', filename);
+      setDownloadSuccess("Collections Report downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download report: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
+      setDownloadingStatement(false);
+    }
   };
 
   return (
@@ -318,6 +322,26 @@ FEE CATEGORY COLLECTIONS PROGRESS:
           </p>
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Download Status Toast Banner */}
+      {downloadError && (
+        <div className="badge badge-overdue" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AlertCircle size={16} />
+          <span>{downloadError}</span>
+        </div>
+      )}
+      {downloadSuccess && (
+        <div className="badge badge-paid" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <CheckCircle size={16} />
+          <span>{downloadSuccess}</span>
+        </div>
+      )}
 
       {/* Metrics Row (4 Cards) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
@@ -339,7 +363,7 @@ FEE CATEGORY COLLECTIONS PROGRESS:
             <span className="metric-label">Fees Collected</span>
             <CheckCircle size={20} color="#0D9488" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#0D9488" }}>₹{dashboardData.collected.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#0D9488" }}>{Math.round(dashboardData.collected)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-paid" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Collected
@@ -352,7 +376,7 @@ FEE CATEGORY COLLECTIONS PROGRESS:
             <span className="metric-label">Pending Fees</span>
             <Calendar size={20} color="#D97706" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#D97706" }}>₹{dashboardData.pending.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#D97706" }}>{Math.round(dashboardData.pending)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-pending" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Pending
@@ -365,7 +389,7 @@ FEE CATEGORY COLLECTIONS PROGRESS:
             <span className="metric-label">Overdue Fees</span>
             <AlertCircle size={20} color="#E11D48" />
           </div>
-          <div className="metric-value mono-data" style={{ color: "#E11D48" }}>₹{dashboardData.overdue.toLocaleString("en-IN")}</div>
+          <div className="metric-value mono-data" style={{ color: "#E11D48" }}>{Math.round(dashboardData.overdue)}</div>
           <div style={{ marginTop: "0.25rem" }}>
             <span className="badge badge-overdue" style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}>
               Overdue
@@ -457,10 +481,20 @@ FEE CATEGORY COLLECTIONS PROGRESS:
             <button
               onClick={handleExportPDF}
               className="btn btn-secondary"
-              style={{ width: "100%", padding: "0.85rem", justifyContent: "center", gap: "0.75rem", fontSize: "13px", border: "1.5px solid var(--sidebar-brown)" }}
+              style={{ width: "100%", padding: "0.85rem", justifyContent: "center", gap: "0.75rem", fontSize: "13px", border: "1.5px solid var(--sidebar-brown)", display: "flex", alignItems: "center" }}
+              disabled={downloadingStatement}
             >
-              <Download size={18} />
-              <span>Download PDF Statement</span>
+              {downloadingStatement ? (
+                <>
+                  <div style={{ width: "16px", height: "16px", border: "2px solid #ccc", borderTopColor: "#333", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                  <span>Generating Statement...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={18} />
+                  <span>Download PDF Statement</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -514,11 +548,16 @@ FEE CATEGORY COLLECTIONS PROGRESS:
                     <td style={{ textAlign: "right" }}>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: "0.25rem 0.5rem", fontSize: "12px", height: "auto" }}
+                        style={{ padding: "0.25rem 0.5rem", fontSize: "12px", height: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
                         onClick={() => handleReceiptDownload(rec)}
                         title="Download Receipt Vouchers"
+                        disabled={downloadingReceiptId === rec.receipt_id}
                       >
-                        <Printer size={14} />
+                        {downloadingReceiptId === rec.receipt_id ? (
+                          <div style={{ width: "14px", height: "14px", border: "2px solid #ccc", borderTopColor: "#333", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                        ) : (
+                          <Download size={14} />
+                        )}
                       </button>
                     </td>
                   </tr>
@@ -606,7 +645,7 @@ FEE CATEGORY COLLECTIONS PROGRESS:
                       >
                         {studentInstallments.map(inst => (
                           <option key={inst.installment_id} value={inst.installment_id}>
-                            Installment #{inst.installment_number} - Due Date: {inst.due_date} (₹{inst.amount.toFixed(2)})
+                            Installment #{inst.installment_number} - Due Date: {inst.due_date} (₹{Number(inst.amount).toFixed(2)})
                           </option>
                         ))}
                       </select>

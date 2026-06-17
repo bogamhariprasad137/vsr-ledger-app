@@ -11,6 +11,7 @@ export default function InstallmentManager() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const loadData = async () => {
     try {
@@ -76,6 +77,8 @@ export default function InstallmentManager() {
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     setErrorMsg("");
     setSuccessMsg("");
 
@@ -85,9 +88,11 @@ export default function InstallmentManager() {
       setSuccessMsg("Installment schedules saved successfully.");
       setTimeout(() => {
         navigate(`/admin/students/${student.student_id}`);
-      }, 1500);
+        setIsSaving(false);
+      }, 500);
     } catch (err) {
       setErrorMsg(err.message);
+      setIsSaving(false);
     }
   };
 
@@ -317,10 +322,10 @@ export default function InstallmentManager() {
         <button
           className="btn btn-primary"
           onClick={handleSave}
-          disabled={!isValidSum}
+          disabled={!isValidSum || isSaving}
           style={{ minWidth: "160px" }}
         >
-          Confirm Splitting config
+          {isSaving ? "Saving..." : "Confirm Splitting config"}
         </button>
       </div>
     </div>

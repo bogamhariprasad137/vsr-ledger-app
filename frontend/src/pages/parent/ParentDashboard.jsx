@@ -1,10 +1,30 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { Wallet, CheckCircle2, ShieldAlert, Landmark, Info, ArrowUpRight } from "lucide-react";
+import { Wallet, CheckCircle2, ShieldAlert, Landmark, Info, ArrowUpRight, AlertCircle, CheckCircle, Download } from "lucide-react";
 import { Link } from "react-router-dom";
+import { api } from "../../services/api";
 
 export default function ParentDashboard() {
   const { activeStudent, currentUser, refreshActiveStudent } = useAuth();
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+  const [downloadError, setDownloadError] = useState("");
+  const [downloadSuccess, setDownloadSuccess] = useState("");
+
+  const handleReceiptDownload = async (rec) => {
+    setDownloadingReceiptId(rec.receipt_id);
+    setDownloadError("");
+    setDownloadSuccess("");
+    try {
+      await api.receipts.download(rec);
+      setDownloadSuccess("Receipt downloaded successfully!");
+      setTimeout(() => setDownloadSuccess(""), 3000);
+    } catch (err) {
+      setDownloadError(`Failed to download receipt: ${err.message}`);
+      setTimeout(() => setDownloadError(""), 5000);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
 
   useEffect(() => {
     // Refresh student installment records on load
@@ -30,9 +50,9 @@ export default function ParentDashboard() {
   const upcoming = installments.filter(i => i.status !== "paid").slice(0, 2);
 
   // Math totals
-  const total = fee?.total_fee || 0;
-  const paid = fee?.paid_amount || 0;
-  const pending = fee?.pending_amount || 0;
+  const total = Number(fee?.total_fee) || 0;
+  const paid = Number(fee?.paid_amount) || 0;
+  const pending = Number(fee?.pending_amount) || 0;
   const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
 
   return (
@@ -46,6 +66,26 @@ export default function ParentDashboard() {
           Viewing academic fees status for <strong>{activeStudent.student_name}</strong> (Admission No: <strong className="mono-data">{activeStudent.admission_number}</strong>).
         </p>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
+      {/* Download Status Toast Banner */}
+      {downloadError && (
+        <div className="badge badge-overdue" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <AlertCircle size={16} />
+          <span>{downloadError}</span>
+        </div>
+      )}
+      {downloadSuccess && (
+        <div className="badge badge-paid" style={{ width: "100%", padding: "0.75rem", borderRadius: "4px", marginBottom: "1rem", textTransform: "none", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <CheckCircle size={16} />
+          <span>{downloadSuccess}</span>
+        </div>
+      )}
 
       {/* Metrics Section */}
       <div className="grid-3" style={{ marginBottom: "2rem" }}>
@@ -120,15 +160,15 @@ export default function ParentDashboard() {
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", fontSize: "14px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px dashed var(--structure-border)", paddingBottom: "0.5rem" }}>
               <span style={{ color: "var(--warm-muted)" }}>Admission Fee:</span>
-              <strong className="mono-data">₹{(activeStudent.admission_fee || 0).toFixed(2)}</strong>
+              <strong className="mono-data">₹{Number(activeStudent.admission_fee || 0).toFixed(2)}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px dashed var(--structure-border)", paddingBottom: "0.5rem" }}>
               <span style={{ color: "var(--warm-muted)" }}>Term Fee:</span>
-              <strong className="mono-data">₹{(activeStudent.term_fee || 0).toFixed(2)}</strong>
+              <strong className="mono-data">₹{Number(activeStudent.term_fee || 0).toFixed(2)}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px dashed var(--structure-border)", paddingBottom: "0.5rem" }}>
               <span style={{ color: "var(--warm-muted)" }}>Daycare Fee:</span>
-              <strong className="mono-data">₹{(activeStudent.daycare_fee || 0).toFixed(2)}</strong>
+              <strong className="mono-data">₹{Number(activeStudent.daycare_fee || 0).toFixed(2)}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "15px", color: "var(--sidebar-brown)", paddingTop: "0.25rem" }}>
               <span>Total Allocated Fee:</span>
@@ -185,7 +225,7 @@ export default function ParentDashboard() {
 
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <span className="mono-data" style={{ fontWeight: "700", fontSize: "14px" }}>
-                      ₹{inst.amount.toFixed(2)}
+                      ₹{Number(inst.amount).toFixed(2)}
                     </span>
                     <span className={`badge ${inst.status === "overdue" ? "badge-overdue" : "badge-info"}`}>
                       {inst.status}
@@ -245,14 +285,20 @@ export default function ParentDashboard() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                     <span className="mono-data" style={{ fontWeight: "700", fontSize: "14px", color: "var(--status-paid-text)" }}>
-                      ₹{rec.amount_paid.toFixed(2)}
+                      ₹{Number(rec.amount_paid).toFixed(2)}
                     </span>
                     <button
                       className="btn btn-secondary"
-                      style={{ padding: "0.25rem 0.5rem", fontSize: "11px", height: "auto" }}
-                      onClick={() => api.receipts.download(rec)}
+                      style={{ padding: "0.25rem 0.5rem", fontSize: "11px", height: "auto", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                      onClick={() => handleReceiptDownload(rec)}
+                      disabled={downloadingReceiptId === rec.receipt_id}
+                      title="Download Receipt PDF"
                     >
-                      PDF
+                      {downloadingReceiptId === rec.receipt_id ? (
+                        <div style={{ width: "11px", height: "11px", border: "1.5px solid #ccc", borderTopColor: "#333", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                      ) : (
+                        <span>PDF</span>
+                      )}
                     </button>
                   </div>
                 </div>

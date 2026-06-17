@@ -1,5 +1,13 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { api } from "../services/api";
+import { auth } from "../services/firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  sendPasswordResetEmail
+} from "firebase/auth";
 
 const AuthContext = createContext(null);
 
@@ -9,6 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [activeStudent, setActiveStudent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  const isSigningUpRef = useRef(false);
 
   // Helper to load parent's children
   const loadParentData = async (email) => {
@@ -27,34 +37,62 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    const initSession = async () => {
-      const user = api.auth.getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-        if (user.role === "parent") {
-          await loadParentData(user.email);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (isSigningUpRef.current) {
+        // Skip automatic login sync during registration flow
+        return;
+      }
+      if (firebaseUser) {
+        try {
+          // Retrieve active token
+          const idToken = await firebaseUser.getIdToken();
+          // Sync with local backend
+          const dbUser = await api.auth.login(idToken);
+          setCurrentUser(dbUser);
+          if (dbUser.role === "parent") {
+            await loadParentData(dbUser.email);
+          } else {
+            setConnectedStudents([]);
+            setActiveStudent(null);
+          }
+        } catch (err) {
+          console.error("Firebase session restoration backend sync failed:", err);
+          setCurrentUser(null);
+          await signOut(auth).catch(() => {});
         }
+      } else {
+        setCurrentUser(null);
+        setConnectedStudents([]);
+        setActiveStudent(null);
       }
       setLoading(false);
-    };
-    initSession();
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const login = async (email, password, role) => {
     setLoading(true);
     setError(null);
     try {
-      const user = await api.auth.login(email, password, role);
-      setCurrentUser(user);
-      if (user.role === "parent") {
-        await loadParentData(user.email);
+      // 1. Sign in to Firebase Auth
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      // 2. Fetch JWT ID token
+      const idToken = await credential.user.getIdToken(true);
+      // 3. Send token and expected role to MySQL backend for verification/sync
+      const dbUser = await api.auth.login(idToken, role);
+      
+      setCurrentUser(dbUser);
+      if (dbUser.role === "parent") {
+        await loadParentData(dbUser.email);
       } else {
         setConnectedStudents([]);
         setActiveStudent(null);
       }
-      return user;
+      return dbUser;
     } catch (err) {
       setError(err.message);
+      await signOut(auth).catch(() => {});
       throw err;
     } finally {
       setLoading(false);
@@ -64,17 +102,35 @@ export const AuthProvider = ({ children }) => {
   const signup = async (email, password) => {
     setLoading(true);
     setError(null);
+    isSigningUpRef.current = true;
     try {
-      const user = await api.auth.signup(email, password);
-      setCurrentUser(user);
-      if (user.role === "parent") {
-        await loadParentData(user.email);
+      // 1. Register parent in Firebase Auth or sign in if already exists (relational linking sync)
+      let credential;
+      try {
+        credential = await createUserWithEmailAndPassword(auth, email, password);
+      } catch (fbErr) {
+        if (fbErr.code === "auth/email-already-in-use") {
+          credential = await signInWithEmailAndPassword(auth, email, password);
+        } else {
+          throw fbErr;
+        }
       }
-      return user;
+      // 2. Fetch JWT ID token
+      const idToken = await credential.user.getIdToken(true);
+      // 3. Send token to backend to link with pre-registered profile
+      const dbUser = await api.auth.signup(idToken);
+      
+      setCurrentUser(dbUser);
+      if (dbUser.role === "parent") {
+        await loadParentData(dbUser.email);
+      }
+      return dbUser;
     } catch (err) {
       setError(err.message);
+      await signOut(auth).catch(() => {});
       throw err;
     } finally {
+      isSigningUpRef.current = false;
       setLoading(false);
     }
   };
@@ -82,6 +138,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setLoading(true);
     try {
+      await signOut(auth);
       await api.auth.logout();
       setCurrentUser(null);
       setConnectedStudents([]);
@@ -114,6 +171,7 @@ export const AuthProvider = ({ children }) => {
   const resetPassword = async (email) => {
     setError(null);
     try {
+      await sendPasswordResetEmail(auth, email);
       return await api.auth.resetPassword(email);
     } catch (err) {
       setError(err.message);

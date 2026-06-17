@@ -1,13 +1,15 @@
 import datetime
 import random
-from flask import Blueprint, request, jsonify, send_file, make_response
+from flask import Blueprint, request, jsonify, send_file, make_response, g
 import io
 from app.database import get_db_connection
 from app.services.pdf_service import generate_receipt_pdf
+from app.utils.auth import require_firebase_auth
 
 receipts_bp = Blueprint('receipts', __name__)
 
 @receipts_bp.route('', methods=['GET'])
+@require_firebase_auth(role='admin')
 def get_all_receipts():
     try:
         conn = get_db_connection()
@@ -34,6 +36,7 @@ def get_all_receipts():
         return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
 
 @receipts_bp.route('/log', methods=['POST'])
+@require_firebase_auth(role='admin')
 def log_payment():
     data = request.json or {}
     student_id = data.get('student_id')
@@ -184,6 +187,7 @@ def log_payment():
         return jsonify({"success": False, "message": f"Database transaction failed: {str(e)}"}), 500
 
 @receipts_bp.route('/download/<int:receipt_id>', methods=['GET'])
+@require_firebase_auth()
 def download_receipt(receipt_id):
     try:
         conn = get_db_connection()
@@ -194,10 +198,17 @@ def download_receipt(receipt_id):
             if not receipt:
                 return jsonify({"success": False, "message": "Receipt not found."}), 404
                 
+            # RBAC check: Parents can only download their own children's receipts
+            if g.current_user['role'] == 'parent':
+                cursor.execute("SELECT student_id FROM students WHERE student_id = %s AND user_id = %s", (receipt['student_id'], g.current_user['user_id']))
+                if not cursor.fetchone():
+                    return jsonify({"success": False, "message": "Access denied. You can only download receipts for your own children."}), 403
+                
             # Fetch student and fee info
-            cursor.execute("SELECT parent_name FROM students WHERE student_id = %s", (receipt['student_id'],))
+            cursor.execute("SELECT parent_name, admission_number FROM students WHERE student_id = %s", (receipt['student_id'],))
             student = cursor.fetchone()
             parent_name = student['parent_name'] if student else 'N/A'
+            admission_number = student['admission_number'] if student else 'N/A'
             
             cursor.execute("SELECT pending_amount FROM fees WHERE student_id = %s", (receipt['student_id'],))
             fee = cursor.fetchone()
@@ -206,6 +217,7 @@ def download_receipt(receipt_id):
             # Fetch installment info to determine fee category
             cursor.execute("SELECT * FROM installments WHERE installment_id = %s", (receipt['installment_id'],))
             inst = cursor.fetchone()
+            installment_number = inst['installment_number'] if inst else 'N/A'
             
             # Deduce fee category splits
             # We can re-evaluate what was paid by comparing total paid before/after, or simply query fee configurations
@@ -265,7 +277,7 @@ def download_receipt(receipt_id):
             if isinstance(receipt['payment_date'], (datetime.date, datetime.datetime)):
                 receipt['payment_date'] = receipt['payment_date'].isoformat()
                 
-            pdf_data = generate_receipt_pdf(receipt, parent_name, remaining_balance, fee_category)
+            pdf_data = generate_receipt_pdf(receipt, parent_name, remaining_balance, fee_category, admission_number, installment_number)
             
             # Send file as binary attachment
             response = make_response(pdf_data)
