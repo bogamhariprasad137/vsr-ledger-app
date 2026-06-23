@@ -16,12 +16,14 @@ def create_app():
     from app.routes.installments import installments_bp
     from app.routes.receipts import receipts_bp
     from app.routes.reports import reports_bp
+    from app.routes.notifications import notifications_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(students_bp, url_prefix='/api/students')
     app.register_blueprint(installments_bp, url_prefix='/api/installments')
     app.register_blueprint(receipts_bp, url_prefix='/api/receipts')
     app.register_blueprint(reports_bp, url_prefix='/api/reports')
+    app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     
     # Root route for sanity check
     @app.route('/')

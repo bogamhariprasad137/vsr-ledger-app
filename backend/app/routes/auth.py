@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from app.database import get_db_connection
 from app.utils.auth import require_firebase_auth
+from app.services.notification_service import create_notification
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -84,6 +85,16 @@ def signup():
             cursor.execute(
                 "UPDATE students SET user_id = %s WHERE LOWER(parent_email) = %s",
                 (new_id, email)
+            )
+            
+            # Trigger admin notification for parent registration
+            create_notification(
+                conn=conn,
+                user_id=None,
+                student_id=None,
+                title="New Parent Account Created",
+                message=f"Parent {email} has successfully registered and linked to their child's profile.",
+                type="new_parent"
             )
             
             return jsonify({

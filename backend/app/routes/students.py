@@ -3,6 +3,7 @@ import random
 from flask import Blueprint, request, jsonify, g
 from app.database import get_db_connection
 from app.utils.auth import require_firebase_auth
+from app.services.notification_service import create_notification
 
 students_bp = Blueprint('students', __name__)
 
@@ -385,6 +386,16 @@ def create_student():
                     """, (fee_id, i, amt, due_inst))
                     
             cursor.execute("COMMIT")
+            
+            # Trigger automated system notification creation for Admin
+            create_notification(
+                conn=conn,
+                user_id=None,
+                student_id=student_id,
+                title="New Student Registered",
+                message=f"Student {student_name} has been registered in {student_class} with admission number {admission_number}.",
+                type="new_registration"
+            )
             
         return jsonify({
             "success": True,

@@ -24,6 +24,7 @@ import ParentDashboard from "./pages/parent/ParentDashboard";
 import ParentProfile from "./pages/parent/ParentProfile";
 import ParentHistory from "./pages/parent/ParentHistory";
 import ParentReceipts from "./pages/parent/ParentReceipts";
+import Notifications from "./pages/Notifications";
 
 // Layout Wrapper
 function Layout({ children, title, allowedRole }) {
@@ -179,6 +180,14 @@ export default function App() {
             element={
               <Layout title="Voucher Invoice Downloads" allowedRole="parent">
                 <ParentReceipts />
+              </Layout>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <Layout title="Notification Center">
+                <Notifications />
               </Layout>
             }
           />

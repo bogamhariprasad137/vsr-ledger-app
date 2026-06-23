@@ -80,6 +80,34 @@ def init_db(app):
             else:
                 print("WARNING: schema.sql not found. Tables will be created on demand or must be loaded manually.")
                 
+        # Step 2b: Check if notifications table exists. If not, run migration
+        with conn.cursor() as cursor:
+            cursor.execute("SHOW TABLES LIKE 'notifications'")
+            notifications_table_exists = cursor.fetchone()
+            
+        if not notifications_table_exists:
+            print("Notifications table not found. Initializing notifications migration...")
+            migration_paths = [
+                os.path.join(app.root_path, "..", "..", "database", "migration_notifications.sql"),
+                os.path.join(app.root_path, "..", "database", "migration_notifications.sql"),
+                "database/migration_notifications.sql"
+            ]
+            
+            migration_content = None
+            for path in migration_paths:
+                if os.path.exists(path):
+                    with open(path, "r", encoding="utf-8") as f:
+                        migration_content = f.read()
+                    break
+            
+            if migration_content:
+                with conn.cursor() as cursor:
+                    cursor.execute(migration_content)
+                print("Notifications table successfully created via migration.")
+            else:
+                print("WARNING: migration_notifications.sql not found. notifications table was not created.")
+
+                
         # Step 3: Seed database if users table is empty
         with conn.cursor() as cursor:
             cursor.execute("SELECT COUNT(*) as count FROM users")

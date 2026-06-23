@@ -5,6 +5,7 @@ import io
 from app.database import get_db_connection
 from app.services.pdf_service import generate_receipt_pdf
 from app.utils.auth import require_firebase_auth
+from app.services.notification_service import create_notification
 
 receipts_bp = Blueprint('receipts', __name__)
 
@@ -64,7 +65,12 @@ def log_payment():
             cursor.execute("START TRANSACTION")
             
             # 1. Verify student exists
-            cursor.execute("SELECT student_name, parent_name FROM students WHERE student_id = %s", (student_id,))
+            cursor.execute("""
+                SELECT s.student_name, s.parent_name, u.firebase_uid 
+                FROM students s 
+                LEFT JOIN users u ON s.user_id = u.user_id 
+                WHERE s.student_id = %s
+            """, (student_id,))
             student = cursor.fetchone()
             if not student:
                 cursor.execute("ROLLBACK")
@@ -161,6 +167,17 @@ def log_payment():
             
             receipt_id = cursor.lastrowid
             cursor.execute("COMMIT")
+            
+            # Trigger payment_received notification for the parent
+            if student['firebase_uid']:
+                create_notification(
+                    conn=conn,
+                    user_id=student['firebase_uid'],
+                    student_id=student_id,
+                    title="Payment Received",
+                    message=f"A payment of ₹{amount_paid:.2f} has been logged for {student['student_name']}. Receipt #{receipt_no} is available for download.",
+                    type="payment_received"
+                )
             
             # Fetch inserted receipt details to return to frontend
             return jsonify({

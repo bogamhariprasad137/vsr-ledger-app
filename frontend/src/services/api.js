@@ -201,5 +201,37 @@ export const api = {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     }
+  },
+  // --- Notifications Services ---
+  notifications: {
+    getAll: async (page = 1, limit = 20) => {
+      const headers = await getHeaders(false);
+      const res = await fetch(`${API_BASE}/notifications?page=${page}&limit=${limit}`, { headers });
+      return handleResponse(res);
+    },
+
+    getUnreadCount: async () => {
+      const headers = await getHeaders(false);
+      const res = await fetch(`${API_BASE}/notifications/unread-count`, { headers });
+      return handleResponse(res);
+    },
+
+    markAsRead: async (id) => {
+      const headers = await getHeaders(false);
+      const res = await fetch(`${API_BASE}/notifications/read/${id}`, {
+        method: "PUT",
+        headers
+      });
+      return handleResponse(res);
+    },
+
+    markAllAsRead: async () => {
+      const headers = await getHeaders(false);
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: "PUT",
+        headers
+      });
+      return handleResponse(res);
+    }
   }
 };
