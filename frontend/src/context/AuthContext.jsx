@@ -37,6 +37,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    
+    // Check if we have a mocked session stored locally
+    if (isLocalhost) {
+      const savedUser = localStorage.getItem("mock_user");
+      const savedToken = localStorage.getItem("mock_token");
+      if (savedUser && savedToken) {
+        try {
+          const dbUser = JSON.parse(savedUser);
+          setCurrentUser(dbUser);
+          if (dbUser.role === "parent") {
+            loadParentData(dbUser.email);
+          }
+          setLoading(false);
+          return; // Skip Firebase auth listener for mock session
+        } catch (e) {
+          localStorage.removeItem("mock_user");
+          localStorage.removeItem("mock_token");
+        }
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (isSigningUpRef.current) {
         // Skip automatic login sync during registration flow
@@ -75,12 +97,26 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Sign in to Firebase Auth
-      const credential = await signInWithEmailAndPassword(auth, email, password);
-      // 2. Fetch JWT ID token
-      const idToken = await credential.user.getIdToken(true);
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      let idToken;
+      
+      if (isLocalhost) {
+        console.log("Localhost environment detected. Bypassing Firebase Auth. Token:", `mock-token-${email}`);
+        idToken = `mock-token-${email}`;
+      } else {
+        // 1. Sign in to Firebase Auth
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        // 2. Fetch JWT ID token
+        idToken = await credential.user.getIdToken(true);
+      }
+      
       // 3. Send token and expected role to MySQL backend for verification/sync
       const dbUser = await api.auth.login(idToken, role);
+      
+      if (isLocalhost) {
+        localStorage.setItem("mock_user", JSON.stringify(dbUser));
+        localStorage.setItem("mock_token", idToken);
+      }
       
       setCurrentUser(dbUser);
       if (dbUser.role === "parent") {
@@ -104,21 +140,35 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     isSigningUpRef.current = true;
     try {
-      // 1. Register parent in Firebase Auth or sign in if already exists (relational linking sync)
-      let credential;
-      try {
-        credential = await createUserWithEmailAndPassword(auth, email, password);
-      } catch (fbErr) {
-        if (fbErr.code === "auth/email-already-in-use") {
-          credential = await signInWithEmailAndPassword(auth, email, password);
-        } else {
-          throw fbErr;
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      let idToken;
+      
+      if (isLocalhost) {
+        console.log("Localhost environment detected. Bypassing Firebase Auth for signup. Token:", `mock-token-${email}`);
+        idToken = `mock-token-${email}`;
+      } else {
+        // 1. Register parent in Firebase Auth or sign in if already exists (relational linking sync)
+        let credential;
+        try {
+          credential = await createUserWithEmailAndPassword(auth, email, password);
+        } catch (fbErr) {
+          if (fbErr.code === "auth/email-already-in-use") {
+            credential = await signInWithEmailAndPassword(auth, email, password);
+          } else {
+            throw fbErr;
+          }
         }
+        // 2. Fetch JWT ID token
+        idToken = await credential.user.getIdToken(true);
       }
-      // 2. Fetch JWT ID token
-      const idToken = await credential.user.getIdToken(true);
+      
       // 3. Send token to backend to link with pre-registered profile
       const dbUser = await api.auth.signup(idToken);
+      
+      if (isLocalhost) {
+        localStorage.setItem("mock_user", JSON.stringify(dbUser));
+        localStorage.setItem("mock_token", idToken);
+      }
       
       setCurrentUser(dbUser);
       if (dbUser.role === "parent") {
@@ -138,6 +188,8 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setLoading(true);
     try {
+      localStorage.removeItem("mock_user");
+      localStorage.removeItem("mock_token");
       await signOut(auth);
       await api.auth.logout();
       setCurrentUser(null);

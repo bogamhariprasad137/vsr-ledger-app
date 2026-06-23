@@ -39,10 +39,14 @@ def signup():
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # 1. Verify if email is pre-registered in students as parent_email
-            cursor.execute("SELECT * FROM students WHERE LOWER(parent_email) = %s", (email,))
-            student_match = cursor.fetchone()
-            print(f"[SIGNUP DEBUG] Student match found: {student_match}")
+            # 1. Verify if email is pre-registered in students as parent_email (bypass for admin)
+            is_admin_email = (email.lower() == 'bogamhari137@gmail.com')
+            student_match = True
+            
+            if not is_admin_email:
+                cursor.execute("SELECT * FROM students WHERE LOWER(parent_email) = %s", (email,))
+                student_match = cursor.fetchone()
+                print(f"[SIGNUP DEBUG] Student match found: {student_match}")
             
             if not student_match:
                 print(f"[SIGNUP DEBUG] Blocked signup for unregistered email: '{email}'")
@@ -57,12 +61,22 @@ def signup():
             
             if existing_user:
                 # Update firebase_uid in MySQL if it is unlinked or mismatching
+                updates = []
+                params = []
                 if not existing_user['firebase_uid'] or existing_user['firebase_uid'] != firebase_uid:
-                    cursor.execute(
-                        "UPDATE users SET firebase_uid = %s WHERE user_id = %s",
-                        (firebase_uid, existing_user['user_id'])
-                    )
-                    existing_user['firebase_uid'] = firebase_uid
+                    updates.append("firebase_uid = %s")
+                    params.append(firebase_uid)
+                if is_admin_email and existing_user['role'] != 'admin':
+                    updates.append("role = 'admin'")
+                
+                if updates:
+                    sql = f"UPDATE users SET {', '.join(updates)} WHERE user_id = %s"
+                    params.append(existing_user['user_id'])
+                    cursor.execute(sql, tuple(params))
+                    
+                    # Refetch existing user
+                    cursor.execute("SELECT * FROM users WHERE user_id = %s", (existing_user['user_id'],))
+                    existing_user = cursor.fetchone()
                 
                 return jsonify({
                     "success": True,
@@ -75,12 +89,24 @@ def signup():
                 })
                 
             # 3. Create new user in users table
+            role = 'admin' if is_admin_email else 'parent'
             cursor.execute(
-                "INSERT INTO users (firebase_uid, email, role) VALUES (%s, %s, 'parent')",
-                (firebase_uid, email)
+                "INSERT INTO users (firebase_uid, email, role) VALUES (%s, %s, %s)",
+                (firebase_uid, email, role)
             )
             new_id = cursor.lastrowid
             
+            if is_admin_email:
+                return jsonify({
+                    "success": True,
+                    "user": {
+                        "user_id": new_id,
+                        "firebase_uid": firebase_uid,
+                        "email": email,
+                        "role": "admin"
+                    }
+                })
+                
             # 4. Link existing student records to this new user_id
             cursor.execute(
                 "UPDATE students SET user_id = %s WHERE LOWER(parent_email) = %s",

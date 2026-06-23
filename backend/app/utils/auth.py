@@ -61,6 +61,22 @@ def get_google_public_keys():
     return _certs_cache
 
 def verify_firebase_token(token):
+    # Local development bypass for testing on localhost
+    if token and token.startswith("mock-token-"):
+        from flask import current_app
+        is_local = (
+            current_app.config.get('DB_HOST') in ('localhost', '127.0.0.1') or 
+            os.environ.get("FLASK_ENV") == "development" or 
+            os.environ.get("DEBUG") == "True"
+        )
+        if is_local:
+            mock_email = token.replace("mock-token-", "").strip().lower()
+            return {
+                "email": mock_email,
+                "sub": f"mock-uid-{mock_email.split('@')[0]}",
+                "uid": f"mock-uid-{mock_email.split('@')[0]}"
+            }
+
     # Try using the official Firebase Admin SDK first if we have credentials
     if _has_sdk_credentials:
         try:
