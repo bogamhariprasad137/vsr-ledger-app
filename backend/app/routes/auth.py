@@ -39,8 +39,12 @@ def signup():
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
-            # 1. Verify if email is pre-registered in students as parent_email (bypass for admin)
-            is_admin_email = (email.lower() == 'bogamhari137@gmail.com')
+            # 1. Check if user already exists in the users table
+            cursor.execute("SELECT * FROM users WHERE LOWER(email) = %s", (email.lower(),))
+            existing_user = cursor.fetchone()
+            
+            # Determine if this is an admin email (either primary admin or pre-registered in DB as admin)
+            is_admin_email = (email.lower() == 'bogamhari137@gmail.com') or (existing_user and existing_user['role'] == 'admin')
             student_match = True
             
             if not is_admin_email:
@@ -54,10 +58,6 @@ def signup():
                     "success": False, 
                     "message": "Self-signup blocked: Parent email is not pre-registered by school administration."
                 }), 403
-                
-            # 2. Check if user already exists
-            cursor.execute("SELECT * FROM users WHERE LOWER(email) = %s", (email,))
-            existing_user = cursor.fetchone()
             
             if existing_user:
                 # Update firebase_uid in MySQL if it is unlinked or mismatching

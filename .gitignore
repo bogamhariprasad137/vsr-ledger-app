@@ -34,6 +34,7 @@ backend/serviceAccountKey.json
 
 # Temporary test scripts
 brain/verify_api.py
+brain/check_env_and_db.py
 verify_api.py
 check_seed.py
 
